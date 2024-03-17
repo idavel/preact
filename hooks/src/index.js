@@ -29,6 +29,7 @@ let oldRoot = options._root;
 
 const RAF_TIMEOUT = 100;
 let prevRaf;
+let unmountQueue = [];
 
 /** @type {(vnode: import('./internal').VNode) => void} */
 options._diff = vnode => {
@@ -97,6 +98,21 @@ options.diffed = vnode => {
 // TODO: Improve typing of commitQueue parameter
 /** @type {(vnode: import('./internal').VNode, commitQueue: any) => void} */
 options._commit = (vnode, commitQueue) => {
+	unmountQueue.some(component => {
+		let hasErrored;
+		component.__hooks._list.forEach(i => {
+			try {
+				invokeCleanup(i);
+			} catch (e) {
+				hasErrored = e;
+			}
+		});
+		component.__hooks = undefined;
+		if (hasErrored) {
+			options._catchError(hasErrored, component._vnode);
+		}
+	});
+	unmountQueue = [];
 	commitQueue.some(component => {
 		try {
 			component._renderCallbacks.forEach(invokeCleanup);
@@ -121,16 +137,7 @@ options.unmount = vnode => {
 
 	const c = vnode._component;
 	if (c && c.__hooks) {
-		let hasErrored;
-		c.__hooks._list.forEach(s => {
-			try {
-				invokeCleanup(s);
-			} catch (e) {
-				hasErrored = e;
-			}
-		});
-		c.__hooks = undefined;
-		if (hasErrored) options._catchError(hasErrored, c._vnode);
+		unmountQueue.push(c);
 	}
 };
 
@@ -452,8 +459,8 @@ export function useId() {
 function flushAfterPaintEffects() {
 	let component;
 	while ((component = afterPaintEffects.shift())) {
-		if (!component._parentDom || !component.__hooks) continue;
 		try {
+			if (!component._parentDom || !component.__hooks) continue;
 			component.__hooks._pendingEffects.forEach(invokeCleanup);
 			component.__hooks._pendingEffects.forEach(invokeEffect);
 			component.__hooks._pendingEffects = [];

@@ -606,7 +606,7 @@ describe('useEffect', () => {
 	it('should not schedule effects that have no change', () => {
 		const calls = [];
 		let set;
-		const App = ({ i }) => {
+		const App = () => {
 			const [greeting, setGreeting] = useState('hi');
 			set = setGreeting;
 
@@ -635,5 +635,44 @@ describe('useEffect', () => {
 		});
 		expect(calls.length).to.equal(1);
 		expect(calls).to.deep.equal(['doing effecthi']);
+	});
+
+	it('defers cleanup to the commit phase', () => {
+		const calls = [];
+		let set;
+
+		const Child = () => {
+			useEffect(() => () => calls.push('child cleanup'), []);
+			return null;
+		};
+
+		const Parent = () => {
+			calls.push('parent render start');
+			useEffect(() => {
+				calls.push('parent render end');
+			});
+
+			let [showChild, setShowChild] = useState(true);
+
+			set = () => setShowChild(false);
+
+			return showChild ? <Child /> : null;
+		};
+
+		act(() => {
+			render(<Parent />, scratch);
+		});
+		expect(calls).to.deep.equal(['parent render start', 'parent render end']);
+
+		act(() => {
+			set();
+		});
+		expect(calls).to.deep.equal([
+			'parent render start',
+			'parent render end',
+			'parent render start',
+			'parent render end',
+			'child cleanup'
+		]);
 	});
 });
