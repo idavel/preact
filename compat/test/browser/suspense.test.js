@@ -1199,6 +1199,68 @@ describe('suspense', () => {
 			});
 	});
 
+	it.only('should correctly render nested Suspense components w/ preceding wrappers', () => {
+		// Inspired by the nested-suspense demo from #1865
+		// TODO: Explore writing a test that varies the loading orders
+
+		const Wrapper = p => <>{p.children}</>;
+
+		const [Lazy1, resolve1] = createLazy();
+		const [Lazy2, resolve2] = createLazy();
+
+		const loadingHtml = `<p>Loading...</p>`;
+
+		render(
+			<Suspense fallback={<p>Loading...</p>}>
+				<Wrapper>
+					<Wrapper />
+					<Wrapper>
+						<Wrapper />
+						<Wrapper>
+							<Wrapper />
+							<Wrapper>
+								<Wrapper />
+								<p>Foo</p>
+								<Wrapper />
+							</Wrapper>
+							<Wrapper />
+						</Wrapper>
+						<Wrapper />
+					</Wrapper>
+					<Wrapper>
+						<Wrapper>
+							<button>
+								<Lazy1>
+									<Lazy2 />
+								</Lazy1>
+							</button>
+						</Wrapper>
+					</Wrapper>
+				</Wrapper>
+			</Suspense>,
+			scratch
+		);
+		rerender(); // Rerender with the fallback HTML
+
+		expect(scratch.innerHTML).to.equal(loadingHtml);
+
+		return resolve1(p => <div>{p.children}</div>)
+			.then(() => {
+				rerender();
+				expect(scratch.innerHTML).to.equal(loadingHtml);
+			})
+			.then(() => {
+				rerender();
+				expect(scratch.innerHTML).to.equal(loadingHtml);
+
+				return resolve2(() => <p>Bar</p>);
+			})
+			.then(() => {
+				rerender();
+				expect(scratch.innerHTML).to.equal(`<p>Foo</p><div><p>Bar</p></div>`);
+			});
+	});
+
 	it('should correctly render nested Suspense components without intermediate DOM #2747', () => {
 		const [ProfileDetails, resolveDetails] = createLazy();
 		const [ProfileTimeline, resolveTimeline] = createLazy();
