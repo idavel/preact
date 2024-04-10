@@ -121,15 +121,21 @@ options.unmount = vnode => {
 
 	const c = vnode._component;
 	if (c && c.__hooks) {
-		let hasErrored;
+		let hasErrored,
+			hasScheduled = false;
 		c.__hooks._list.forEach(s => {
 			try {
-				invokeCleanup(s);
+				c.__hooks._pendingEffects.push(s);
+				if (!hasScheduled) {
+					c._unmounted = true;
+					hasScheduled = true;
+					afterPaint(afterPaintEffects.push(c));
+				}
 			} catch (e) {
 				hasErrored = e;
 			}
 		});
-		c.__hooks = undefined;
+		c.__hooks._list = undefined;
 		if (hasErrored) options._catchError(hasErrored, c._vnode);
 	}
 };
@@ -455,7 +461,9 @@ function flushAfterPaintEffects() {
 		if (!component._parentDom || !component.__hooks) continue;
 		try {
 			component.__hooks._pendingEffects.forEach(invokeCleanup);
-			component.__hooks._pendingEffects.forEach(invokeEffect);
+			if (!component._unmounted) {
+				component.__hooks._pendingEffects.forEach(invokeEffect);
+			}
 			component.__hooks._pendingEffects = [];
 		} catch (e) {
 			component.__hooks._pendingEffects = [];
